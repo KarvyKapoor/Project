@@ -33,14 +33,10 @@ A lightweight, scalable digital platform designed to streamline sanitation workf
 
 ## 📱 Modules
 
-- **Student/Faculty Portal**
+- **User Portal**
   - File complaints
   - View history
   - Earn badges
-
-- **Staff Portal**
-  - View assigned tasks
-  - Submit completion reports
 
 - **Admin Panel**
   - Assign tasks
