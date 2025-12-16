@@ -1,0 +1,8 @@
+{
+  "name": "ZeroKachra",
+  "description": "A conversational assistant for a digital waste management system for campuses. It features role-based dashboards for user, and administrators to request pickups, file complaints, and track resolutions with visual analytics.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
