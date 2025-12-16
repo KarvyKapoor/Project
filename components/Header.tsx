@@ -47,6 +47,7 @@ const Header: React.FC<HeaderProps> = ({ user, onLogout, notifications, userView
       { label: 'Recent', action: () => setAdminView?.('recent'), isActive: adminView === 'recent' },
       { label: 'History', action: () => setAdminView?.('history'), isActive: adminView === 'history' },
       { label: 'Reports', action: () => setAdminView?.('reports'), isActive: adminView === 'reports' },
+      { label: getTranslation(language, 'recycleBin'), action: () => setAdminView?.('bin'), isActive: adminView === 'bin' },
     ]
   };
 

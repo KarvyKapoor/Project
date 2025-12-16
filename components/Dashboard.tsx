@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { User, Complaint, Role, Status, UserView, AdminView, Badge, Language } from '../types';
 import ComplaintForm from './ComplaintForm';
@@ -11,10 +12,14 @@ interface ComplaintCardProps {
   currentUser: User;
   onUpdateStatus: (complaintId: number, status: Status) => void;
   onDelete?: (complaintId: number) => void;
+  onRestore?: (complaintId: number) => void;
+  onPermanentDelete?: (complaintId: number) => void;
   users: User[];
   onVote?: (complaintId: number) => void;
   isModal?: boolean;
   onVerify?: (complaintId: number) => void;
+  onAdminVerify?: (complaintId: number, status: 'Verified' | 'Spam') => void;
+  onClick?: () => void;
   language?: Language;
 }
 
@@ -24,11 +29,13 @@ const statusColorMap = {
   [Status.RESOLVED]: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 border-green-500',
 };
 
-// Full Detail Card (used in Modal)
-const ComplaintCard: React.FC<ComplaintCardProps> = ({ complaint, currentUser, onUpdateStatus, onDelete, users, onVote, isModal, onVerify, language = 'English' as Language }) => {
+// Full Detail Card (used in Modal and Admin Grid)
+const ComplaintCard: React.FC<ComplaintCardProps> = ({ complaint, currentUser, onUpdateStatus, onDelete, onRestore, onPermanentDelete, users, onVote, isModal, onVerify, onAdminVerify, onClick, language = 'English' as Language }) => {
     const [isVerifying, setIsVerifying] = useState(false);
 
-    const handleVerifyClick = async () => {
+    const handleVerifyClick = async (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
         if(onVerify) {
             setIsVerifying(true);
             await onVerify(complaint.id);
@@ -36,9 +43,48 @@ const ComplaintCard: React.FC<ComplaintCardProps> = ({ complaint, currentUser, o
         }
     }
 
-    const handleDelete = () => {
-        if (onDelete && window.confirm(getTranslation(language, 'confirmDelete'))) {
+    const handleDelete = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        // Soft delete (Move to Bin) - No confirmation needed for better UX, acts as "Archive"
+        if (onDelete) {
             onDelete(complaint.id);
+        }
+    }
+    
+    const handleRestore = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (onRestore) {
+            onRestore(complaint.id);
+        }
+    }
+
+    const handlePermanentDelete = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (onPermanentDelete && window.confirm(getTranslation(language, 'confirmPermanentDelete'))) {
+            onPermanentDelete(complaint.id);
+        }
+    }
+    
+    const handleVoteClick = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if(onVote) onVote(complaint.id);
+    }
+    
+    const handleUpdateStatusClick = (e: React.MouseEvent, status: Status) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onUpdateStatus(complaint.id, status);
+    }
+
+    const handleAdminAction = (e: React.MouseEvent, status: 'Verified' | 'Spam') => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (onAdminVerify) {
+            onAdminVerify(complaint.id, status);
         }
     }
 
@@ -49,8 +95,42 @@ const ComplaintCard: React.FC<ComplaintCardProps> = ({ complaint, currentUser, o
         return status;
     };
     
+    // Auth status helper
+    const authStatus = complaint.authenticityStatus || 'Unverified';
+    const isAiChecked = authStatus === 'Likely Authentic' || authStatus === 'Potential Spam';
+    const isVerified = authStatus === 'Verified';
+    const isSpam = authStatus === 'Spam';
+
+    // If deleted (in Recycle Bin)
+    if (complaint.deletedAt && currentUser.role === Role.ADMIN) {
+        return (
+            <div className={`bg-gray-100 dark:bg-gray-800 rounded-lg shadow-md p-6 mb-4 border-l-4 border-gray-500 transition-all duration-300 h-full flex flex-col relative opacity-80`}>
+                 <div className="flex justify-between items-start mb-2">
+                    <h3 className="text-xl font-bold text-gray-700 dark:text-gray-300 break-words">{complaint.location} (Deleted)</h3>
+                    <p className="text-sm text-red-500">Deleted: {complaint.deletedAt.toLocaleDateString()}</p>
+                 </div>
+                 <p className="text-gray-600 dark:text-gray-400 mt-2 flex-grow">{complaint.description}</p>
+                 <div className="mt-4 flex gap-4 relative z-20">
+                     {onRestore && (
+                        <button onClick={handleRestore} className="flex-1 px-4 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 transition-colors">
+                            {getTranslation(language, 'restore')}
+                        </button>
+                     )}
+                     {onPermanentDelete && (
+                        <button onClick={handlePermanentDelete} className="flex-1 px-4 py-2 bg-red-600 text-white font-semibold rounded-md hover:bg-red-700 transition-colors">
+                             {getTranslation(language, 'deleteForever')}
+                        </button>
+                     )}
+                 </div>
+            </div>
+        )
+    }
+    
     return (
-        <div className={`bg-white dark:bg-gray-800 rounded-lg ${!isModal ? 'shadow-md p-6 mb-4 border-l-4 hover:border-l-8' : ''} ${statusColorMap[complaint.status]} transition-all duration-300 h-auto flex flex-col relative`}>
+        <div 
+            onClick={onClick}
+            className={`bg-white dark:bg-gray-800 rounded-lg ${!isModal ? 'shadow-md p-6 border-l-4 hover:border-l-8' : 'p-6'} ${statusColorMap[complaint.status]} transition-all duration-300 h-full flex flex-col relative ${onClick ? 'cursor-pointer hover:shadow-lg hover:-translate-y-1' : ''}`}
+        >
              <div className="flex justify-between items-start mb-2">
                 <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
@@ -68,13 +148,17 @@ const ComplaintCard: React.FC<ComplaintCardProps> = ({ complaint, currentUser, o
                     <div className="flex gap-2 mt-2 flex-wrap items-center">
                         {complaint.isPublic && <span className="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200 rounded-full font-medium">Public</span>}
                         
-                        {currentUser.role === Role.ADMIN && complaint.authenticityStatus && (
+                        {currentUser.role === Role.ADMIN && (
                             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                                complaint.authenticityStatus === 'Likely Authentic' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 
-                                complaint.authenticityStatus === 'Potential Spam' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
+                                isVerified ? 'bg-green-600 text-white' : 
+                                isSpam ? 'bg-red-600 text-white' :
+                                authStatus === 'Likely Authentic' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 
+                                authStatus === 'Potential Spam' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
                                 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
                             }`}>
-                                {complaint.authenticityStatus}
+                                {isVerified ? getTranslation(language, 'statusVerified') :
+                                 isSpam ? getTranslation(language, 'statusSpam') :
+                                 authStatus}
                             </span>
                         )}
                          <span className={`px-2 py-0.5 text-xs font-semibold rounded-full whitespace-nowrap ${statusColorMap[complaint.status].split(' ')[0]} ${statusColorMap[complaint.status].split(' ')[1]}`}>
@@ -85,8 +169,8 @@ const ComplaintCard: React.FC<ComplaintCardProps> = ({ complaint, currentUser, o
                 <div className="flex flex-col items-end space-y-2 shrink-0 ml-2">
                     {complaint.isPublic && onVote && currentUser.role === Role.USER && complaint.status !== Status.RESOLVED && (
                          <button 
-                            onClick={() => onVote(complaint.id)}
-                            className="flex items-center space-x-1 px-3 py-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors text-gray-600 dark:text-gray-300 shadow-sm"
+                            onClick={handleVoteClick}
+                            className="flex items-center space-x-1 px-3 py-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors text-gray-600 dark:text-gray-300 shadow-sm relative z-20"
                             title="Upvote this complaint"
                          >
                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-500" viewBox="0 0 20 20" fill="currentColor">
@@ -119,47 +203,81 @@ const ComplaintCard: React.FC<ComplaintCardProps> = ({ complaint, currentUser, o
 
              {currentUser.role === Role.ADMIN && (
                  <div className="mt-6 space-y-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                     <div className="flex flex-wrap gap-2">
-                        {complaint.status === Status.PENDING && (
-                            <button onClick={() => onUpdateStatus(complaint.id, Status.IN_PROGRESS)} className="flex-1 px-4 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 shadow-sm transition-colors">
-                                Start Progress
-                            </button>
-                        )}
-                        {complaint.status !== Status.RESOLVED && (
-                            <button onClick={() => onUpdateStatus(complaint.id, Status.RESOLVED)} className="flex-1 px-4 py-2 bg-green-600 text-white font-semibold rounded-md hover:bg-green-700 shadow-sm transition-colors">
-                                Mark as Resolved
-                            </button>
-                        )}
-                         {onVerify && (!complaint.authenticityStatus || complaint.authenticityStatus === 'Unverified') && (
-                             <button 
-                                onClick={handleVerifyClick} 
-                                disabled={isVerifying}
-                                className="flex-1 px-4 py-2 bg-purple-600 text-white font-semibold rounded-md hover:bg-purple-700 shadow-sm flex justify-center items-center transition-colors"
-                             >
-                                {isVerifying ? (
-                                    <>
-                                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                        </svg>
-                                        Checking...
-                                    </>
-                                ) : 'Check Authenticity'}
-                             </button>
+                     <div className="flex flex-col gap-2">
+                         {/* 2-Factor Authenticity Controls */}
+                         {onVerify && onAdminVerify && !isVerified && !isSpam && (
+                             <div className="flex gap-2 w-full relative z-20">
+                                 {/* Factor 1: AI Check */}
+                                 {!isAiChecked ? (
+                                     <button 
+                                        onClick={handleVerifyClick} 
+                                        disabled={isVerifying}
+                                        className={`flex-1 px-4 py-2 bg-purple-600 text-white font-semibold rounded-md hover:bg-purple-700 shadow-sm flex justify-center items-center transition-colors disabled:opacity-70`}
+                                     >
+                                        {isVerifying ? (
+                                            <>
+                                                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                </svg>
+                                                AI Checking...
+                                            </>
+                                        ) : getTranslation(language, 'checkAuthenticity')}
+                                     </button>
+                                 ) : (
+                                     /* Factor 2: Admin Confirmation */
+                                     <>
+                                        <button 
+                                            onClick={(e) => handleAdminAction(e, 'Verified')}
+                                            className="flex-1 px-3 py-2 bg-green-600 text-white font-semibold rounded-md hover:bg-green-700 shadow-sm flex items-center justify-center gap-1 transition-colors"
+                                            title="Confirm as Authentic"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                            </svg>
+                                            {getTranslation(language, 'adminVerify')}
+                                        </button>
+                                        <button 
+                                            onClick={(e) => handleAdminAction(e, 'Spam')}
+                                            className="flex-1 px-3 py-2 bg-red-600 text-white font-semibold rounded-md hover:bg-red-700 shadow-sm flex items-center justify-center gap-1 transition-colors"
+                                            title="Mark as Spam"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                                            </svg>
+                                            {getTranslation(language, 'adminReject')}
+                                        </button>
+                                     </>
+                                 )}
+                             </div>
                          )}
-                         {/* Restricted Delete Button: Only for Potential Spam */}
-                         {onDelete && complaint.authenticityStatus === 'Potential Spam' && (
-                            <button 
-                                onClick={handleDelete}
-                                className="px-4 py-2 bg-red-600 text-white font-semibold rounded-md hover:bg-red-700 shadow-sm flex justify-center items-center transition-colors"
-                                title="Delete Complaint"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                                <span className="ml-2 hidden sm:inline">{getTranslation(language, 'delete')}</span>
-                            </button>
-                         )}
+
+                         <div className="flex flex-wrap gap-2 relative z-20">
+                            {complaint.status === Status.PENDING && (
+                                <button onClick={(e) => handleUpdateStatusClick(e, Status.IN_PROGRESS)} className="flex-1 px-4 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 shadow-sm transition-colors">
+                                    Start Progress
+                                </button>
+                            )}
+                            {complaint.status !== Status.RESOLVED && (
+                                <button onClick={(e) => handleUpdateStatusClick(e, Status.RESOLVED)} className="flex-1 px-4 py-2 bg-green-600 text-white font-semibold rounded-md hover:bg-green-700 shadow-sm transition-colors">
+                                    Mark as Resolved
+                                </button>
+                            )}
+                             
+                             {/* Enhanced Delete: Move to Bin */}
+                             {onDelete && (
+                                <button 
+                                    onClick={handleDelete}
+                                    className="px-4 py-2 bg-red-600 text-white font-semibold rounded-md hover:bg-red-700 shadow-sm flex justify-center items-center transition-colors"
+                                    title="Move to Recycle Bin"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                    <span className="ml-2 hidden sm:inline">{getTranslation(language, 'delete')}</span>
+                                </button>
+                             )}
+                         </div>
                      </div>
                  </div>
             )}
@@ -256,15 +374,18 @@ interface DashboardProps {
   onAddComplaint: (location: string, description: string, imageUrl?: string, isPublic?: boolean, authenticityStatus?: 'Unverified' | 'Likely Authentic' | 'Potential Spam') => void;
   onUpdateComplaintStatus: (complaintId: number, status: Status) => void;
   onDeleteComplaint?: (complaintId: number) => void;
+  onRestoreComplaint?: (complaintId: number) => void;
+  onPermanentDelete?: (complaintId: number) => void;
   onVote?: (complaintId: number) => void;
   userView?: UserView;
   setUserView?: (view: UserView) => void;
   adminView?: AdminView;
   onVerify?: (complaintId: number) => void;
+  onAdminVerify?: (complaintId: number, status: 'Verified' | 'Spam') => void;
   language: Language;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ currentUser, complaints, users, onAddComplaint, onUpdateComplaintStatus, onDeleteComplaint, onVote, userView, setUserView, adminView, onVerify, language }) => {
+const Dashboard: React.FC<DashboardProps> = ({ currentUser, complaints, users, onAddComplaint, onUpdateComplaintStatus, onDeleteComplaint, onRestoreComplaint, onPermanentDelete, onVote, userView, setUserView, adminView, onVerify, onAdminVerify, language }) => {
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
 
   const handleComplaintSubmit = (location: string, description: string, imageUrl?: string, isPublic?: boolean, authenticityStatus?: 'Unverified' | 'Likely Authentic' | 'Potential Spam') => {
@@ -275,12 +396,41 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, complaints, users, o
   const handleComplaintCancel = () => {
     setUserView?.('history');
   };
+  
+  // Wrapper handlers to ensure modal closes if the selected item is modified in a way that should remove it from view
+  const handleDeleteWrapper = (id: number) => {
+    if (onDeleteComplaint) {
+        onDeleteComplaint(id);
+        if (selectedComplaint && selectedComplaint.id === id) {
+            setSelectedComplaint(null);
+        }
+    }
+  };
+
+  const handleRestoreWrapper = (id: number) => {
+    if (onRestoreComplaint) {
+        onRestoreComplaint(id);
+        if (selectedComplaint && selectedComplaint.id === id) {
+            setSelectedComplaint(null);
+        }
+    }
+  };
+
+  const handlePermanentDeleteWrapper = (id: number) => {
+    if (onPermanentDelete) {
+        onPermanentDelete(id);
+        if (selectedComplaint && selectedComplaint.id === id) {
+            setSelectedComplaint(null);
+        }
+    }
+  };
 
   const renderUserDashboard = () => {
-    const userComplaints = complaints.filter(c => c.userId === currentUser.id);
+    // Basic filter: active and non-deleted
+    const userComplaints = complaints.filter(c => c.userId === currentUser.id && !c.deletedAt);
     
-    // Only show unresolved complaints in the public/community feed
-    const publicComplaintsBase = complaints.filter(c => c.isPublic && c.status !== Status.RESOLVED);
+    // Public filter: public, not resolved, not deleted
+    const publicComplaintsBase = complaints.filter(c => c.isPublic && c.status !== Status.RESOLVED && !c.deletedAt);
 
     switch(userView) {
       case 'home':
@@ -383,9 +533,16 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, complaints, users, o
           </div>
         );
       case 'gamification':
-        // Calculate dynamic points based on votes on unresolved complaints
+        // Calculate dynamic points based on votes on unresolved complaints. 
+        // Ensure deleted complaints AND spam complaints are excluded so scam reports don't award points.
         const sortedUsers = [...users].map(u => {
-             const userActivePublicComplaints = complaints.filter(c => c.userId === u.id && c.isPublic && c.status !== Status.RESOLVED);
+             const userActivePublicComplaints = complaints.filter(c => 
+                 c.userId === u.id && 
+                 c.isPublic && 
+                 c.status !== Status.RESOLVED && 
+                 !c.deletedAt && 
+                 c.authenticityStatus !== 'Spam'
+             );
              const engagementPoints = userActivePublicComplaints.reduce((sum, c) => sum + (c.votes * 5), 0);
              const totalPoints = u.points + engagementPoints;
 
@@ -529,11 +686,12 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, complaints, users, o
     const [fullReport, setFullReport] = useState<string>('');
     const [isGeneratingFull, setIsGeneratingFull] = useState(false);
 
+    // Filter out deleted complaints for reports
     const filteredComplaints = useMemo(() => {
         return complaints.filter(c => {
             const yearMatch = filters.year === 'all' || c.createdAt.getFullYear() === parseInt(filters.year);
             const monthMatch = filters.month === 'all' || c.createdAt.getMonth() === parseInt(filters.month);
-            return yearMatch && monthMatch;
+            return yearMatch && monthMatch && !c.deletedAt;
         });
     }, [filters, complaints]);
 
@@ -773,9 +931,15 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, complaints, users, o
   const renderAdminDashboard = () => {
     const [historyFilters, setHistoryFilters] = useState({ startDate: '', endDate: '', location: '', status: 'all', authenticity: 'all' });
     
+    // Logic for Recycled Bin
+    const binComplaints = useMemo(() => {
+        return complaints.filter(c => c.deletedAt).sort((a,b) => (b.deletedAt?.getTime() || 0) - (a.deletedAt?.getTime() || 0));
+    }, [complaints]);
+
     const filteredHistory = useMemo(() => {
         return [...complaints]
         .filter(c => {
+            if (c.deletedAt) return false; // Exclude deleted from history
             if (historyFilters.status !== 'all' && c.status !== historyFilters.status) return false;
             if (historyFilters.authenticity !== 'all' && c.authenticityStatus !== historyFilters.authenticity) return false;
             if (historyFilters.location && !c.location.toLowerCase().includes(historyFilters.location.toLowerCase())) return false;
@@ -788,107 +952,173 @@ const Dashboard: React.FC<DashboardProps> = ({ currentUser, complaints, users, o
 
      switch(adminView) {
         case 'recent':
-            const recentComplaints = complaints.filter(c => c.status === Status.PENDING || c.status === Status.IN_PROGRESS).sort((a,b) => b.createdAt.getTime() - a.createdAt.getTime());
+            const recentComplaints = complaints.filter(c => !c.deletedAt && (c.status === Status.PENDING || c.status === Status.IN_PROGRESS)).sort((a,b) => b.createdAt.getTime() - a.createdAt.getTime());
              return (
                 <div>
                   <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">Recent Complaints</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                      {recentComplaints.map(c => (
-                        <div key={c.id} onClick={() => setSelectedComplaint(c)} className="cursor-pointer">
+                        <div key={c.id} className="h-full">
                             <ComplaintCard 
                                 complaint={c} 
                                 currentUser={currentUser} 
                                 onUpdateStatus={onUpdateComplaintStatus} 
-                                onDelete={onDeleteComplaint} 
+                                onDelete={handleDeleteWrapper} 
                                 users={users} 
                                 isModal={false} 
-                                onVerify={onVerify} 
-                                language={language} 
+                                onVerify={onVerify}
+                                onAdminVerify={onAdminVerify}
+                                onClick={() => setSelectedComplaint(c)}
+                                language={language}
                             />
                         </div>
                      ))}
                   </div>
-                  {recentComplaints.length === 0 && <p className="text-gray-500">No pending complaints.</p>}
+                  {recentComplaints.length === 0 && (
+                      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 text-center text-gray-500 dark:text-gray-400">
+                          No recent complaints requiring action.
+                      </div>
+                  )}
                 </div>
             );
         case 'history':
             return (
                 <div>
-                  <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">All Complaints History</h2>
-                  <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md mb-6 flex flex-wrap gap-4 items-center border border-gray-100 dark:border-gray-700">
-                    <input type="date" value={historyFilters.startDate} onChange={e => setHistoryFilters({...historyFilters, startDate: e.target.value})} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-green-500 focus:border-green-500" />
-                    <input type="date" value={historyFilters.endDate} onChange={e => setHistoryFilters({...historyFilters, endDate: e.target.value})} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-green-500 focus:border-green-500" />
-                    <input type="text" placeholder="Filter by location..." value={historyFilters.location} onChange={e => setHistoryFilters({...historyFilters, location: e.target.value})} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-green-500 focus:border-green-500" />
-                    <select value={historyFilters.status} onChange={e => setHistoryFilters({...historyFilters, status: e.target.value})} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-green-500 focus:border-green-500">
-                        <option value="all">All Statuses</option>
-                        {Object.values(Status).map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                     <select value={historyFilters.authenticity} onChange={e => setHistoryFilters({...historyFilters, authenticity: e.target.value})} className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-green-500 focus:border-green-500">
-                        <option value="all">All Authenticity</option>
-                        <option value="Unverified">Unverified</option>
-                        <option value="Likely Authentic">Likely Authentic</option>
-                        <option value="Potential Spam">Potential Spam</option>
-                    </select>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {filteredHistory.map(c => (
-                        <div key={c.id} onClick={() => setSelectedComplaint(c)} className="cursor-pointer">
-                            <ComplaintCard 
-                                complaint={c} 
-                                currentUser={currentUser} 
-                                onUpdateStatus={onUpdateComplaintStatus} 
-                                onDelete={onDeleteComplaint} 
-                                users={users} 
-                                isModal={false} 
-                                onVerify={onVerify} 
-                                language={language} 
-                            />
-                        </div>
-                    ))}
-                  </div>
+                     <h2 className="text-2xl font-bold mb-4 text-gray-800 dark:text-white">Complaint History</h2>
+                     
+                     {/* Filters */}
+                     <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md mb-6 flex flex-wrap gap-4 border border-gray-100 dark:border-gray-700">
+                        <input 
+                            type="text" 
+                            placeholder="Search location..." 
+                            value={historyFilters.location}
+                            onChange={(e) => setHistoryFilters({...historyFilters, location: e.target.value})}
+                            className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-green-500 focus:border-green-500"
+                        />
+                         <select 
+                            value={historyFilters.status} 
+                            onChange={(e) => setHistoryFilters({...historyFilters, status: e.target.value})}
+                            className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-green-500 focus:border-green-500"
+                        >
+                            <option value="all">All Statuses</option>
+                            {Object.values(Status).map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                         <select 
+                            value={historyFilters.authenticity} 
+                            onChange={(e) => setHistoryFilters({...historyFilters, authenticity: e.target.value})}
+                            className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-green-500 focus:border-green-500"
+                        >
+                            <option value="all">All Authenticity</option>
+                            <option value="Unverified">Unverified</option>
+                            <option value="Likely Authentic">Likely Authentic</option>
+                            <option value="Potential Spam">Potential Spam</option>
+                            <option value="Verified">Verified</option>
+                            <option value="Spam">Spam</option>
+                        </select>
+                        <input 
+                            type="date" 
+                            value={historyFilters.startDate}
+                            onChange={(e) => setHistoryFilters({...historyFilters, startDate: e.target.value})}
+                            className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-green-500 focus:border-green-500"
+                        />
+                        <input 
+                            type="date" 
+                            value={historyFilters.endDate}
+                            onChange={(e) => setHistoryFilters({...historyFilters, endDate: e.target.value})}
+                            className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-green-500 focus:border-green-500"
+                        />
+                     </div>
+
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {filteredHistory.map(c => (
+                            <div key={c.id} className="h-full">
+                                <ComplaintCard 
+                                    complaint={c} 
+                                    currentUser={currentUser} 
+                                    onUpdateStatus={onUpdateComplaintStatus} 
+                                    onDelete={handleDeleteWrapper} 
+                                    users={users} 
+                                    isModal={false} 
+                                    onVerify={onVerify}
+                                    onAdminVerify={onAdminVerify}
+                                    onClick={() => setSelectedComplaint(c)}
+                                    language={language}
+                                />
+                            </div>
+                        ))}
+                     </div>
+                     {filteredHistory.length === 0 && <p className="text-gray-500 dark:text-gray-400 mt-4">No complaints found matching filters.</p>}
                 </div>
             );
         case 'reports':
-             return <AdminReportsView />;
+            return AdminReportsView();
+        case 'bin':
+             return (
+                <div>
+                     <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-2xl font-bold text-gray-800 dark:text-white">{getTranslation(language, 'recycleBin')}</h2>
+                     </div>
+                     <div className="bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-400 p-4 mb-6">
+                        <div className="flex">
+                            <div className="flex-shrink-0">
+                                <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                </svg>
+                            </div>
+                            <div className="ml-3">
+                                <p className="text-sm text-yellow-700 dark:text-yellow-200">
+                                    Items in the recycle bin are automatically deleted after 30 days.
+                                </p>
+                            </div>
+                        </div>
+                     </div>
+
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {binComplaints.map(c => (
+                            <div key={c.id} className="h-full">
+                                <ComplaintCard 
+                                    complaint={c} 
+                                    currentUser={currentUser} 
+                                    onUpdateStatus={onUpdateComplaintStatus}
+                                    onRestore={handleRestoreWrapper}
+                                    onPermanentDelete={handlePermanentDeleteWrapper}
+                                    users={users} 
+                                    isModal={false} 
+                                    language={language}
+                                />
+                            </div>
+                        ))}
+                     </div>
+                     {binComplaints.length === 0 && <p className="text-gray-500 dark:text-gray-400 mt-4">{getTranslation(language, 'binEmpty')}</p>}
+                </div>
+            );
         default:
-             return null;
-     }
-  }
-
-  const renderDashboardContent = () => {
-    switch(currentUser.role) {
-      case Role.USER:
-        return renderUserDashboard();
-      case Role.ADMIN:
-        return renderAdminDashboard();
-      default:
-        return <p>No dashboard available for this role.</p>;
+            return null;
     }
-  }
-
+  };
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{getTranslation(language, 'dashboardTitle')}, {currentUser.name}!</h1>
-      </div>
-      {renderDashboardContent()}
-      
-      <ComplaintModal complaint={selectedComplaint} onClose={() => setSelectedComplaint(null)}>
-        {selectedComplaint && (
-            <ComplaintCard 
-                complaint={selectedComplaint} 
-                currentUser={currentUser} 
-                onUpdateStatus={onUpdateComplaintStatus}
-                onDelete={onDeleteComplaint}
-                users={users}
-                onVote={onVote}
-                isModal={true}
-                onVerify={onVerify}
-                language={language}
-            />
-        )}
-      </ComplaintModal>
+    <div className="container mx-auto">
+        {currentUser.role === Role.ADMIN ? renderAdminDashboard() : renderUserDashboard()}
+
+        <ComplaintModal complaint={selectedComplaint} onClose={() => setSelectedComplaint(null)}>
+            {selectedComplaint && (
+                <ComplaintCard 
+                    complaint={selectedComplaint} 
+                    currentUser={currentUser} 
+                    onUpdateStatus={onUpdateComplaintStatus} 
+                    onDelete={handleDeleteWrapper}
+                    onRestore={handleRestoreWrapper}
+                    onPermanentDelete={handlePermanentDeleteWrapper}
+                    users={users} 
+                    onVote={onVote} 
+                    isModal={true}
+                    onVerify={onVerify}
+                    onAdminVerify={onAdminVerify}
+                    language={language}
+                />
+            )}
+        </ComplaintModal>
     </div>
   );
 };

@@ -40,7 +40,8 @@ export interface Complaint {
   imageUrl?: string; 
   votes: number;
   isPublic: boolean;
-  authenticityStatus?: 'Unverified' | 'Likely Authentic' | 'Potential Spam';
+  authenticityStatus?: 'Unverified' | 'Likely Authentic' | 'Potential Spam' | 'Verified' | 'Spam';
+  deletedAt?: Date;
 }
 
 export interface Notification {
@@ -52,6 +53,6 @@ export interface Notification {
 }
 
 export type UserView = 'home' | 'history' | 'gamification' | 'fileComplaint' | 'community' | 'help';
-export type AdminView = 'recent' | 'history' | 'reports';
+export type AdminView = 'recent' | 'history' | 'reports' | 'bin';
 
 export type Language = 'English' | 'Spanish' | 'French' | 'German' | 'Hindi' | 'Tamil' | 'Sanskrit' | 'Punjabi' | 'Korean';
