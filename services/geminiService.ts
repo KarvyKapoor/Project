@@ -1,54 +1,8 @@
+
 import { GoogleGenAI, FunctionDeclaration, Type } from "@google/genai";
 import { Complaint } from '../types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
-
-export async function generateReport(complaints: Complaint[], filters: any): Promise<string> {
-  if (!process.env.API_KEY) {
-    return "API Key not configured. Please set up the environment variables.";
-  }
-  
-  if (complaints.length === 0) {
-    return "No complaint data available for the selected filters to generate a report.";
-  }
-
-  // Create a simplified version of the data for the prompt
-  const simplifiedData = complaints.map(c => ({
-      status: c.status,
-      createdAt: c.createdAt.toISOString().split('T')[0], // just date
-      resolvedAt: c.resolvedAt ? c.resolvedAt.toISOString().split('T')[0] : null
-  }));
-
-  const prompt = `
-    You are an AI assistant for a waste management system administrator.
-    Analyze the following data representing complaints based on the filter criteria and provide a brief, insightful summary.
-    
-    Filter Criteria:
-    - Year: ${filters.year}
-    - Month: ${filters.month}
-    
-    Data (JSON format):
-    ${JSON.stringify(simplifiedData, null, 2)}
-    
-    Based on this data, please summarize:
-    1. The overall volume of complaints.
-    2. The distribution of complaint statuses (Pending, In Progress, Resolved).
-    3. Any noticeable trends or patterns (e.g., resolution times, frequent issues).
-    
-    Keep the summary concise and professional.
-  `;
-
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-    });
-    return response.text || "No response generated.";
-  } catch (error) {
-    console.error("Error calling Gemini API:", error);
-    throw new Error("Failed to generate report summary from AI.");
-  }
-}
 
 export async function generateChartAnalysis(chartType: 'status' | 'volume', data: any[], filters: any): Promise<string> {
   if (!process.env.API_KEY) {
@@ -64,7 +18,7 @@ export async function generateChartAnalysis(chartType: 'status' | 'volume', data
   ].filter(Boolean).join(', ');
 
   const basePrompt = `
-    You are an expert data analyst for a waste management system.
+    You are an expert data analyst for "ZeroKachra", a campus waste management system.
     Generate a professional analysis of the provided chart data.
     The data has been filtered by: ${filterDescriptions || 'None'}.
     The output should be a well-structured report with a title, a summary paragraph, and key observations as bullet points.
@@ -90,12 +44,12 @@ export async function generateChartAnalysis(chartType: 'status' | 'volume', data
       **Required Output Format:**
       Complaint Status Distribution Analysis
       
-      This report summarizes the distribution of complaint statuses for the selected period. The data indicates [your summary here, e.g., a high level of efficiency with most complaints resolved...].
+      This report summarizes the distribution of complaint statuses for the selected period. The data indicates [your summary here].
 
-      - **Resolved Complaints:** XX% of complaints are resolved, showing...
-      - **In-Progress Complaints:** XX% are currently being addressed...
-      - **Pending Complaints:** XX% are awaiting assignment...
-      - **Key Insight:** [Your main takeaway or suggestion].
+      - **Resolved Complaints:** [Observation]
+      - **In-Progress Complaints:** [Observation]
+      - **Pending Complaints:** [Observation]
+      - **Key Insight:** [Your main takeaway].
     `;
   } else { // volume
      specificPrompt = `
@@ -105,24 +59,24 @@ export async function generateChartAnalysis(chartType: 'status' | 'volume', data
       The data represents the volume of complaints filed per month.
       Analyze the trends in complaint volume over the period shown.
       - Identify any months with peak or low complaint volumes.
-      - Speculate on potential reasons for these trends (e.g., seasonal changes, campus events).
+      - Speculate on potential reasons for these trends.
       - Comment on the overall workload trend for the sanitation staff.
 
        **Required Output Format:**
       Monthly Complaint Volume Analysis
 
-      This report analyzes the trend of complaint volumes over the selected months. The data reveals [your summary here, e.g., a significant increase in complaints during the fall semester...].
+      This report analyzes the trend of complaint volumes over the selected months. The data reveals [your summary here].
 
-      - **Peak Volume:** The highest number of complaints occurred in [Month] with [Number] issues. This may be due to...
-      - **Lowest Volume:** The lowest activity was in [Month] with [Number] issues, likely because...
-      - **Workload Trend:** The overall trend suggests [e.g., an increasing/decreasing/stable] workload for the staff.
-      - **Key Insight:** [Your main takeaway or suggestion for resource planning].
+      - **Peak Volume:** [Observation]
+      - **Lowest Volume:** [Observation]
+      - **Workload Trend:** [Observation]
+      - **Key Insight:** [Your main takeaway].
     `;
   }
 
    try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-flash-preview',
       contents: specificPrompt,
     });
     return response.text || "No response generated.";
@@ -148,7 +102,7 @@ export async function generateComprehensiveReport(
     ].filter(Boolean).join(', ');
 
     const prompt = `
-        You are a senior administrator for a waste management system.
+        You are a senior administrator for the "ZeroKachra" waste management system.
         Generate a comprehensive executive summary report based on the provided metrics and data.
         
         **Context:**
@@ -167,16 +121,16 @@ export async function generateComprehensiveReport(
         
         **Requirements:**
         1. **Executive Summary:** A brief paragraph summarizing the overall health of the waste management operations.
-        2. **Operational Efficiency:** Analyze the resolution time and rate. Is the team performing well?
+        2. **Operational Efficiency:** Analyze the resolution time and rate.
         3. **Workload Analysis:** Discuss the volume trends and current status backlog.
-        4. **Recommendations:** Provide actionable advice based on the data (e.g., "Allocate more staff during peak months", "Focus on resolving pending issues").
+        4. **Recommendations:** Provide actionable advice based on the data.
         
         Format the output in clean Markdown with headers and bullet points.
     `;
 
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-flash-preview',
             contents: prompt,
         });
         return response.text || "No report generated.";
@@ -202,7 +156,7 @@ export async function analyzeWasteImage(imageDataUrl: string): Promise<string> {
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: 'gemini-3-flash-preview',
       contents: {
         parts: [
             { inlineData: { mimeType, data: base64Data } },
@@ -220,7 +174,7 @@ export async function analyzeWasteImage(imageDataUrl: string): Promise<string> {
 export async function verifyComplaintAuthenticity(description: string, imageUrl?: string): Promise<'Likely Authentic' | 'Potential Spam'> {
   if (!process.env.API_KEY) {
     console.warn("API Key missing");
-    return 'Likely Authentic'; // Default if no API
+    return 'Likely Authentic';
   }
 
   const prompt = `
@@ -248,7 +202,7 @@ export async function verifyComplaintAuthenticity(description: string, imageUrl?
     }
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-flash-preview',
       contents: { parts },
     });
     
@@ -259,7 +213,7 @@ export async function verifyComplaintAuthenticity(description: string, imageUrl?
     return 'Likely Authentic';
   } catch (error) {
     console.error("Error verifying authenticity:", error);
-    return 'Likely Authentic'; // Fallback
+    return 'Likely Authentic';
   }
 }
 
@@ -351,16 +305,16 @@ export async function getChatResponse(
         
         Capabilities:
         1. Answer questions about recycling and sustainability.
-        2. CHECK STATUS: You have access to the user's current complaints below. If they ask about "my complaints" or "status", check this list.
+        2. CHECK STATUS: Access the user's current complaints below.
            Current User Complaints: ${JSON.stringify(simplifiedComplaints)}
-        3. FILE COMPLAINT: If the user explicitly asks to file a complaint (e.g., "report full bin at library"), use the 'create_complaint' tool.
+        3. FILE COMPLAINT: If the user explicitly asks to file a complaint, use the 'create_complaint' tool.
         
         Be concise, friendly, and helpful.
     `;
 
     try {
         const chat = ai.chats.create({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-flash-preview',
             config: { 
                 systemInstruction,
                 tools: [{ functionDeclarations: [createComplaintTool] }]
@@ -370,17 +324,9 @@ export async function getChatResponse(
 
         const result = await chat.sendMessage({ message });
         
-        if (!result) {
-            console.error("Result from chat.sendMessage is undefined");
-            return "I'm sorry, I'm having trouble connecting to the AI service right now.";
-        }
-
-        // Handle Tool Calls (Function Calling)
         const call = result.functionCalls?.[0];
         if (call && onToolCall) {
             const toolResult = await onToolCall(call.name, call.args);
-            
-            // Send tool result back to model to generate natural language confirmation
             const followUp = await chat.sendMessage({
                 message: [{
                     functionResponse: {
